@@ -15,7 +15,7 @@
 import math
 from dataclasses import InitVar, dataclass
 from functools import partial
-from typing import Optional
+from typing import Optional, Any
 
 import jax
 import jax.numpy as jnp
@@ -38,6 +38,12 @@ from tpu_inference.models.jax.utils.qwix.qwix_utils import \
 
 modeling_flax_utils = FlaxUtils()
 
+@dataclass
+class Static:
+    """A wrapper class to hold static values (like Mesh) with a .value attribute.
+    This satisfies tools like qwix that expect graph nodes to have a .value attribute.
+    """
+    value: Any
 
 @dataclass(kw_only=True)
 class CombineExperts(nnx.Module):
@@ -177,7 +183,7 @@ class MoE(nnx.Module):
             router_logits_TE = self.router(x_TD)
             ep_axis_name = self.efd_sharding[0]
             output_TD = fused_ep_moe(
-                mesh=self.mesh,
+                mesh=self.mesh.value,
                 tokens=x_TD,
                 w1=self.kernel_gating_upproj_E2DF.value,
                 w2=self.kernel_down_proj_EFD.value,
@@ -202,7 +208,7 @@ class MoE(nnx.Module):
                 gating_output=router_logits_TE,
                 topk=self.router.num_experts_per_tok,
                 renormalize=self.renormalize,
-                mesh=self.mesh,
+                mesh=self.mesh.value,
                 use_ep=self.num_expert_parallelism > 1,
                 activation=self.hidden_act,
             )
@@ -226,7 +232,7 @@ class MoE(nnx.Module):
 
                 mapped_moe_fwd = partial(
                     jax.experimental.shard_map.shard_map,
-                    mesh=self.mesh,
+                    mesh=self.mesh.value,
                     in_specs=in_specs,
                     out_specs=out_specs,
                     check_rep=False)(sparse_moe_distributed_fwd)
@@ -268,6 +274,10 @@ class MoE(nnx.Module):
 
     def __post_init__(self, rngs: nnx.Rngs):
         """Generates the kernels (weights) for the router and experts (gating, up-projection, and down-projection layers)."""
+        # Wrap mesh in Static to prevent Qwix from crashing when inspecting attributes.
+        if not isinstance(self.mesh, Static):
+            self.mesh = Static(self.mesh)
+
         E = self.num_local_experts
         D = self.hidden_size
         F = self.intermediate_size_moe
@@ -342,11 +352,11 @@ class MoE(nnx.Module):
             self.num_expert_parallelism = 1
         else:
             if isinstance(self.expert_axis_name, str):
-                self.num_expert_parallelism = self.mesh.shape[
+                self.num_expert_parallelism = self.mesh.value.shape[
                     self.expert_axis_name]
             else:
                 self.num_expert_parallelism = math.prod(
-                    self.mesh.shape[axis] for axis in self.expert_axis_name)
+                    self.mesh.value.shape[axis] for axis in self.expert_axis_name)
 
         # Derive if data is sharded by expert
         self.data_axis_name = self.activation_ffw_td[0]
