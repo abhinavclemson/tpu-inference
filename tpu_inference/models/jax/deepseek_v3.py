@@ -817,8 +817,8 @@ class DeepSeekV3(nnx.Module):
                 use_mla_kernel=self.use_mla_kernel,
                 hidden_size=hidden_size,
                 num_attention_heads=num_attention_heads,
-                num_key_value_heads=1
-                if self.use_mla_kernel else num_key_value_heads,
+                num_key_value_heads=num_key_value_heads,
+                # if self.use_mla_kernel else num_key_value_heads,
                 head_dim=v_head_dim,  # MLA uses v_head_dim as head_dim
                 dtype=dtype,
                 # TODO (jacobplatin): we should refactor this to pass a dtype (or config) directly

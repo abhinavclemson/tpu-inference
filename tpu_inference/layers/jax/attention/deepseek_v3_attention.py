@@ -38,6 +38,12 @@ from tpu_inference.layers.jax.rope import DeepseekScalingRotaryEmbedding
 
 KVCache = Tuple[jax.Array, jax.Array]
 
+@dataclass
+class Static:
+    """A wrapper class to hold static values (like Mesh) with a .value attribute.
+    This satisfies tools like qwix that expect graph nodes to have a .value attribute.
+    """
+    value: Any
 
 # TODO (wenxindongwork): Add MLA KV cache implementation. For now, cache complete KV vectors.
 @dataclass(kw_only=True)
@@ -98,6 +104,9 @@ class MLA(nnx.Module):
         self.K = self.num_key_value_heads
         self.D = self.hidden_size
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+
+        if not isinstance(self.mesh, Static):
+            self.mesh = Static(self.mesh)
 
         if not self.use_mla_kernel:
             assert self.N == self.K, "N and K must be equal for MLA"
@@ -321,7 +330,7 @@ class MLA(nnx.Module):
                     k_SNH,
                     v_SNH,
                     attention_metadata,
-                    self.mesh,
+                    self.mesh.value,
                     q_scale,
                     k_scale,
                     v_scale,
@@ -338,7 +347,7 @@ class MLA(nnx.Module):
                     kv_SA,
                     k_rope_SH,
                     attention_metadata,
-                    self.mesh,
+                    self.mesh.value,
                 )
                 outputs_TNH = jnp.einsum("TNA,ANH -> TNH", outputs_TNA,
                                          self.kernel_v_up_proj_ANH.value)
