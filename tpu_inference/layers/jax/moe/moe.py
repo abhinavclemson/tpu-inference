@@ -38,6 +38,7 @@ from tpu_inference.models.jax.utils.qwix.qwix_utils import \
 
 modeling_flax_utils = FlaxUtils()
 
+@dataclass
 class Static:
     """A wrapper class to hold static values (like Mesh) with a .value attribute.
     This satisfies tools like qwix that expect graph nodes to have a .value attribute.
@@ -273,6 +274,8 @@ class MoE(nnx.Module):
 
     def __post_init__(self, rngs: nnx.Rngs):
         """Generates the kernels (weights) for the router and experts (gating, up-projection, and down-projection layers)."""
+        if not isinstance(self.mesh, Static):
+            self.mesh = Static(self.mesh)
         E = self.num_local_experts
         D = self.hidden_size
         F = self.intermediate_size_moe
