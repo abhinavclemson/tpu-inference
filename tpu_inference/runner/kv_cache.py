@@ -42,7 +42,8 @@ def get_kv_cache_shape_with_mesh(mesh: Mesh,
     """Gets the KV cache shape based on the mesh configuration."""
 
     model_cnt = mesh.shape["model"]
-    assert actual_num_kv_heads % model_cnt == 0
+    if not use_mla:
+        assert actual_num_kv_heads % model_cnt == 0
     # NOTE(chengjiyao): Currently, the attention kernel is tailored to the
     # specific model, rather than being determined by the head_dim. If new
     # models are introduced with a head_dim of 64, this will require additional
